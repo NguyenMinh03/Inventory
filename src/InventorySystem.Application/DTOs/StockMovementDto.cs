@@ -18,15 +18,23 @@ public class StockMovementDto
     public string? Notes { get; set; }
 }
 
+// For single-warehouse movements only (In / Out / Adjustment). Transfers
+// between warehouses go through CreateStockTransferDto / TransferAsync instead.
 public class CreateStockMovementDto
 {
     public int ProductId { get; set; }
     public int WarehouseId { get; set; }
-
-    // Destination warehouse; required when Type is Transfer.
-    public int? RelatedWarehouseId { get; set; }
-
     public MovementType Type { get; set; }
+    public int Quantity { get; set; }
+    public string? Reference { get; set; }
+    public string? Notes { get; set; }
+}
+
+public class CreateStockTransferDto
+{
+    public int ProductId { get; set; }
+    public int SourceWarehouseId { get; set; }
+    public int DestinationWarehouseId { get; set; }
     public int Quantity { get; set; }
     public string? Reference { get; set; }
     public string? Notes { get; set; }

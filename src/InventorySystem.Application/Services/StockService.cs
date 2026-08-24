@@ -47,42 +47,33 @@ public class StockService : IStockService
 
     public async Task<StockMovementDto> RecordMovementAsync(CreateStockMovementDto dto)
     {
-        if (await _unitOfWork.Products.GetByIdAsync(dto.ProductId) is null)
-            throw new KeyNotFoundException($"Product {dto.ProductId} was not found.");
-        if (await _unitOfWork.Warehouses.GetByIdAsync(dto.WarehouseId) is null)
-            throw new KeyNotFoundException($"Warehouse {dto.WarehouseId} was not found.");
+        var product = await _unitOfWork.Products.GetByIdAsync(dto.ProductId)
+            ?? throw new KeyNotFoundException($"Product {dto.ProductId} was not found.");
+        var warehouse = await _unitOfWork.Warehouses.GetByIdAsync(dto.WarehouseId)
+            ?? throw new KeyNotFoundException($"Warehouse {dto.WarehouseId} was not found.");
         if (dto.Quantity <= 0)
             throw new DomainException("Movement quantity must be positive.");
 
-        switch (dto.Type)
+        var delta = dto.Type switch
         {
-            case MovementType.In:
-            case MovementType.Adjustment:
-                await AdjustStockAsync(dto.ProductId, dto.WarehouseId, dto.Quantity);
-                break;
+            MovementType.In or MovementType.Adjustment => dto.Quantity,
+            MovementType.Out => -dto.Quantity,
+            _ => throw new DomainException(
+                $"Movement type {dto.Type} is not accepted here; use POST /api/stock/transfers for transfers."),
+        };
 
-            case MovementType.Out:
-                await AdjustStockAsync(dto.ProductId, dto.WarehouseId, -dto.Quantity);
-                break;
-
-            case MovementType.Transfer:
-                if (dto.RelatedWarehouseId is null)
-                    throw new DomainException("Transfer movements require a destination warehouse.");
-                if (dto.RelatedWarehouseId == dto.WarehouseId)
-                    throw new DomainException("Transfer source and destination warehouses must differ.");
-                if (await _unitOfWork.Warehouses.GetByIdAsync(dto.RelatedWarehouseId.Value) is null)
-                    throw new KeyNotFoundException($"Warehouse {dto.RelatedWarehouseId} was not found.");
-
-                await AdjustStockAsync(dto.ProductId, dto.WarehouseId, -dto.Quantity);
-                await AdjustStockAsync(dto.ProductId, dto.RelatedWarehouseId.Value, dto.Quantity);
-                break;
-        }
+        // Validating and staging the StockLevel change before the movement row is
+        // added means a failure here (e.g. InsufficientStockException) leaves the
+        // change tracker untouched - nothing gets written since SaveChangesAsync
+        // is never reached.
+        await AdjustStockAsync(dto.ProductId, dto.WarehouseId, delta);
 
         var movement = new StockMovement
         {
             ProductId = dto.ProductId,
+            Product = product,
             WarehouseId = dto.WarehouseId,
-            RelatedWarehouseId = dto.RelatedWarehouseId,
+            Warehouse = warehouse,
             Type = dto.Type,
             Quantity = dto.Quantity,
             Reference = dto.Reference,
@@ -94,6 +85,65 @@ public class StockService : IStockService
         await _unitOfWork.SaveChangesAsync();
 
         return _mapper.Map<StockMovementDto>(movement);
+    }
+
+    public async Task<IReadOnlyList<StockMovementDto>> TransferAsync(CreateStockTransferDto dto)
+    {
+        var product = await _unitOfWork.Products.GetByIdAsync(dto.ProductId)
+            ?? throw new KeyNotFoundException($"Product {dto.ProductId} was not found.");
+        var sourceWarehouse = await _unitOfWork.Warehouses.GetByIdAsync(dto.SourceWarehouseId)
+            ?? throw new KeyNotFoundException($"Warehouse {dto.SourceWarehouseId} was not found.");
+        var destinationWarehouse = await _unitOfWork.Warehouses.GetByIdAsync(dto.DestinationWarehouseId)
+            ?? throw new KeyNotFoundException($"Warehouse {dto.DestinationWarehouseId} was not found.");
+        if (dto.SourceWarehouseId == dto.DestinationWarehouseId)
+            throw new DomainException("Source and destination warehouses must differ.");
+        if (dto.Quantity <= 0)
+            throw new DomainException("Transfer quantity must be positive.");
+
+        // The source leg is where InsufficientStockException can be thrown. It runs
+        // first and before anything is added to the change tracker, so a failed
+        // transfer leaves zero pending changes - there is nothing for the
+        // destination leg or SaveChangesAsync to partially commit.
+        await AdjustStockAsync(dto.ProductId, dto.SourceWarehouseId, -dto.Quantity);
+        await AdjustStockAsync(dto.ProductId, dto.DestinationWarehouseId, dto.Quantity);
+
+        var reference = dto.Reference ?? $"TRANSFER-{Guid.NewGuid():N}";
+        var occurredUtc = DateTime.UtcNow;
+
+        var outMovement = new StockMovement
+        {
+            ProductId = dto.ProductId,
+            Product = product,
+            WarehouseId = dto.SourceWarehouseId,
+            Warehouse = sourceWarehouse,
+            RelatedWarehouseId = dto.DestinationWarehouseId,
+            RelatedWarehouse = destinationWarehouse,
+            Type = MovementType.Out,
+            Quantity = dto.Quantity,
+            Reference = reference,
+            Notes = dto.Notes,
+            OccurredUtc = occurredUtc,
+        };
+        var inMovement = new StockMovement
+        {
+            ProductId = dto.ProductId,
+            Product = product,
+            WarehouseId = dto.DestinationWarehouseId,
+            Warehouse = destinationWarehouse,
+            RelatedWarehouseId = dto.SourceWarehouseId,
+            RelatedWarehouse = sourceWarehouse,
+            Type = MovementType.In,
+            Quantity = dto.Quantity,
+            Reference = reference,
+            Notes = dto.Notes,
+            OccurredUtc = occurredUtc,
+        };
+
+        await _unitOfWork.StockMovements.AddAsync(outMovement);
+        await _unitOfWork.StockMovements.AddAsync(inMovement);
+        await _unitOfWork.SaveChangesAsync();
+
+        return _mapper.Map<List<StockMovementDto>>(new[] { outMovement, inMovement });
     }
 
     // delta is signed: positive adds stock, negative removes it. Throws

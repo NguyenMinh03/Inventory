@@ -16,11 +16,20 @@ public class StockLevelRepository : IStockLevelRepository
     public async Task<StockLevel?> GetByIdAsync(int productId, int warehouseId) =>
         await _context.StockLevels.FindAsync(productId, warehouseId);
 
+    // Always eager-loaded: every current caller maps these into a display DTO
+    // that needs the product/warehouse names.
     public async Task<IReadOnlyList<StockLevel>> GetAllAsync() =>
-        await _context.StockLevels.ToListAsync();
+        await _context.StockLevels
+            .Include(s => s.Product)
+            .Include(s => s.Warehouse)
+            .ToListAsync();
 
     public async Task<IReadOnlyList<StockLevel>> GetByProductIdAsync(int productId) =>
-        await _context.StockLevels.Where(s => s.ProductId == productId).ToListAsync();
+        await _context.StockLevels
+            .Include(s => s.Product)
+            .Include(s => s.Warehouse)
+            .Where(s => s.ProductId == productId)
+            .ToListAsync();
 
     public async Task AddAsync(StockLevel entity) => await _context.StockLevels.AddAsync(entity);
 

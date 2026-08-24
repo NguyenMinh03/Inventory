@@ -11,16 +11,24 @@ public class CreateStockMovementDtoValidator : AbstractValidator<CreateStockMove
         RuleFor(x => x.ProductId).GreaterThan(0);
         RuleFor(x => x.WarehouseId).GreaterThan(0);
         RuleFor(x => x.Quantity).GreaterThan(0);
-        RuleFor(x => x.Type).IsInEnum();
+        RuleFor(x => x.Type)
+            .IsInEnum()
+            .NotEqual(MovementType.Transfer)
+            .WithMessage("Use POST /api/stock/transfers to move stock between warehouses.");
+    }
+}
 
-        RuleFor(x => x.RelatedWarehouseId)
-            .NotNull()
-            .WithMessage("A destination warehouse is required for a transfer.")
-            .When(x => x.Type == MovementType.Transfer);
+public class CreateStockTransferDtoValidator : AbstractValidator<CreateStockTransferDto>
+{
+    public CreateStockTransferDtoValidator()
+    {
+        RuleFor(x => x.ProductId).GreaterThan(0);
+        RuleFor(x => x.SourceWarehouseId).GreaterThan(0);
+        RuleFor(x => x.DestinationWarehouseId).GreaterThan(0);
+        RuleFor(x => x.Quantity).GreaterThan(0);
 
-        RuleFor(x => x.RelatedWarehouseId)
-            .NotEqual(x => x.WarehouseId)
-            .WithMessage("Transfer source and destination warehouses must differ.")
-            .When(x => x.Type == MovementType.Transfer && x.RelatedWarehouseId is not null);
+        RuleFor(x => x.DestinationWarehouseId)
+            .NotEqual(x => x.SourceWarehouseId)
+            .WithMessage("Source and destination warehouses must differ.");
     }
 }
