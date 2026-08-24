@@ -131,13 +131,19 @@ public class StockServiceTests
     [Fact]
     public async Task TransferAsync_WithInsufficientStockAtSource_ThrowsAndWritesNothing()
     {
-        _stockLevels.Setup(r => r.GetByIdAsync(1, 1))
-            .ReturnsAsync(new StockLevel { ProductId = 1, WarehouseId = 1, QuantityOnHand = 3 });
+        var sourceLevel = new StockLevel { ProductId = 1, WarehouseId = 1, QuantityOnHand = 3 };
+        _stockLevels.Setup(r => r.GetByIdAsync(1, 1)).ReturnsAsync(sourceLevel);
 
         var service = new StockService(_unitOfWork.Object, _mapper);
         var dto = new CreateStockTransferDto { ProductId = 1, SourceWarehouseId = 1, DestinationWarehouseId = 2, Quantity = 10 };
 
         await Assert.ThrowsAsync<InsufficientStockException>(() => service.TransferAsync(dto));
+
+        // Not just "nothing was saved" - the in-memory entity itself was never
+        // mutated either. The insufficient-stock check runs before the
+        // assignment, so a failed transfer can't even leave a dirty tracked
+        // entity behind for an accidental later SaveChangesAsync to pick up.
+        Assert.Equal(3, sourceLevel.QuantityOnHand);
 
         // Neither leg's movement row, nor the destination StockLevel, nor a save
         // ever happens - the failure at the source leg short-circuits everything.

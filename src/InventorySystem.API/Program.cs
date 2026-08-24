@@ -8,6 +8,7 @@ using InventorySystem.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 
@@ -44,13 +45,19 @@ builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("Jwt"))
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 builder.Services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
 
-var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>()
-    ?? throw new InvalidOperationException("Missing required 'Jwt' configuration section.");
-
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    .AddJwtBearer();
+
+// Configured against IOptions<JwtSettings> (resolved lazily, on first use)
+// rather than reading configuration directly here. WebApplicationFactory-based
+// integration tests inject config overrides around the builder.Build() call,
+// so anything read from builder.Configuration before Build() - as a direct
+// Get<JwtSettings>() call here would do - never sees those overrides.
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtSettings>>((bearerOptions, jwtSettingsOptions) =>
     {
-        options.TokenValidationParameters = new TokenValidationParameters
+        var jwtSettings = jwtSettingsOptions.Value;
+        bearerOptions.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
@@ -96,3 +103,9 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Exposes the top-level-statement entry point so WebApplicationFactory<Program>
+// in the integration test project can find it.
+public partial class Program
+{
+}
