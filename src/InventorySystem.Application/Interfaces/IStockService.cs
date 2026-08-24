@@ -9,6 +9,11 @@ public interface IStockService
     Task<IReadOnlyList<ProductDto>> GetLowStockProductsAsync();
     Task<StockMovementDto> RecordMovementAsync(CreateStockMovementDto dto);
 
+    // Same as RecordMovementAsync but does not call SaveChangesAsync, so a
+    // caller (e.g. PurchaseOrderService.ReceiveAsync) can stage several
+    // movements and commit them together in one unit of work.
+    Task<StockMovementDto> StageMovementAsync(CreateStockMovementDto dto);
+
     // Modeled as one Out movement at the source warehouse plus one In movement
     // at the destination, both committed by a single SaveChangesAsync call so
     // the transfer is all-or-nothing.

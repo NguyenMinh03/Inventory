@@ -11,11 +11,13 @@ namespace InventorySystem.Application.Services;
 public class PurchaseOrderService : IPurchaseOrderService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IStockService _stockService;
     private readonly IMapper _mapper;
 
-    public PurchaseOrderService(IUnitOfWork unitOfWork, IMapper mapper)
+    public PurchaseOrderService(IUnitOfWork unitOfWork, IStockService stockService, IMapper mapper)
     {
         _unitOfWork = unitOfWork;
+        _stockService = stockService;
         _mapper = mapper;
     }
 
@@ -119,24 +121,18 @@ public class PurchaseOrderService : IPurchaseOrderService
 
             item.QuantityReceived += line.QuantityReceived;
 
-            var stockLevel = await _unitOfWork.StockLevels.GetByIdAsync(item.ProductId, dto.WarehouseId);
-            if (stockLevel is null)
-            {
-                stockLevel = new StockLevel { ProductId = item.ProductId, WarehouseId = dto.WarehouseId, QuantityOnHand = 0 };
-                await _unitOfWork.StockLevels.AddAsync(stockLevel);
-            }
-
-            stockLevel.QuantityOnHand += line.QuantityReceived;
-            stockLevel.LastUpdatedUtc = DateTime.UtcNow;
-
-            await _unitOfWork.StockMovements.AddAsync(new StockMovement
+            // Stage only - no SaveChangesAsync here. All lines plus the
+            // PurchaseOrder/Item updates below commit together in the single
+            // SaveChangesAsync at the end of this method, so a bad line (or a
+            // stock problem partway through a multi-line receipt) leaves the
+            // whole receive rejected rather than half-applied.
+            await _stockService.StageMovementAsync(new CreateStockMovementDto
             {
                 ProductId = item.ProductId,
                 WarehouseId = dto.WarehouseId,
                 Type = MovementType.In,
                 Quantity = line.QuantityReceived,
                 Reference = $"PO-{order.Id}",
-                OccurredUtc = DateTime.UtcNow,
             });
         }
 

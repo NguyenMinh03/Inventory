@@ -47,6 +47,17 @@ public class StockService : IStockService
 
     public async Task<StockMovementDto> RecordMovementAsync(CreateStockMovementDto dto)
     {
+        var movement = await StageMovementAsync(dto);
+        await _unitOfWork.SaveChangesAsync();
+        return movement;
+    }
+
+    // Same validation and staging as RecordMovementAsync, but without the
+    // SaveChangesAsync call, so a caller that needs to batch several movements
+    // into one larger unit of work (e.g. PurchaseOrderService receiving a PO
+    // with multiple line items) can stage them all and commit exactly once.
+    public async Task<StockMovementDto> StageMovementAsync(CreateStockMovementDto dto)
+    {
         var product = await _unitOfWork.Products.GetByIdAsync(dto.ProductId)
             ?? throw new KeyNotFoundException($"Product {dto.ProductId} was not found.");
         var warehouse = await _unitOfWork.Warehouses.GetByIdAsync(dto.WarehouseId)
@@ -64,8 +75,8 @@ public class StockService : IStockService
 
         // Validating and staging the StockLevel change before the movement row is
         // added means a failure here (e.g. InsufficientStockException) leaves the
-        // change tracker untouched - nothing gets written since SaveChangesAsync
-        // is never reached.
+        // change tracker untouched - nothing gets written unless/until the caller
+        // reaches its own SaveChangesAsync.
         await AdjustStockAsync(dto.ProductId, dto.WarehouseId, delta);
 
         var movement = new StockMovement
@@ -82,7 +93,6 @@ public class StockService : IStockService
         };
 
         await _unitOfWork.StockMovements.AddAsync(movement);
-        await _unitOfWork.SaveChangesAsync();
 
         return _mapper.Map<StockMovementDto>(movement);
     }

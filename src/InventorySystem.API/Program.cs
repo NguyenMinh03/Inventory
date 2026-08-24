@@ -2,6 +2,7 @@ using InventorySystem.API.Middleware;
 using InventorySystem.Application;
 using InventorySystem.Domain.Interfaces;
 using InventorySystem.Infrastructure.Persistence;
+using InventorySystem.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,6 +16,7 @@ builder.Services.AddApplication();
 builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IReportRepository, ReportRepository>();
 
 var app = builder.Build();
 
