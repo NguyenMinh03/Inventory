@@ -38,9 +38,11 @@ public class ExceptionHandlingMiddleware
                     .GroupBy(e => e.PropertyName)
                     .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray())),
 
-            // Order matters: InsufficientStockException derives from DomainException,
-            // so its arm must come first to get its own status code.
+            // Order matters: InsufficientStockException and AuthenticationException
+            // both derive from DomainException, so their arms must come first to
+            // get their own status codes.
             InsufficientStockException stockEx => (StatusCodes.Status409Conflict, stockEx.Message, null),
+            AuthenticationException authEx => (StatusCodes.Status401Unauthorized, authEx.Message, null),
             DomainException domainEx => (StatusCodes.Status400BadRequest, domainEx.Message, null),
             KeyNotFoundException notFoundEx => (StatusCodes.Status404NotFound, notFoundEx.Message, null),
 

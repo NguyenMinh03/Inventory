@@ -17,10 +17,48 @@ public class ProductService : IProductService
         _mapper = mapper;
     }
 
-    public async Task<IReadOnlyList<ProductDto>> GetAllAsync()
+    // Filters/sorts/pages in memory after loading the full product table. Fine at
+    // this dataset's scale; a larger catalog would push this down to the database
+    // via a dedicated paged-query repository method (as IReportRepository does
+    // for reporting) instead of materializing everything first.
+    public async Task<PagedResult<ProductDto>> GetAllAsync(ProductQueryDto query)
     {
         var products = await _unitOfWork.Products.GetAllAsync("Category");
-        return _mapper.Map<List<ProductDto>>(products);
+
+        IEnumerable<Product> filtered = products;
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim();
+            filtered = filtered.Where(p =>
+                p.Name.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                p.Sku.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.SortBy?.Trim().ToLowerInvariant() switch
+        {
+            "name_desc" => filtered.OrderByDescending(p => p.Name),
+            "sku" => filtered.OrderBy(p => p.Sku),
+            "sku_desc" => filtered.OrderByDescending(p => p.Sku),
+            "price" => filtered.OrderBy(p => p.UnitPrice),
+            "price_desc" => filtered.OrderByDescending(p => p.UnitPrice),
+            "reorderlevel" => filtered.OrderBy(p => p.ReorderLevel),
+            "reorderlevel_desc" => filtered.OrderByDescending(p => p.ReorderLevel),
+            _ => filtered.OrderBy(p => p.Name),
+        };
+
+        var materialized = filtered.ToList();
+        var page = query.Page < 1 ? 1 : query.Page;
+        var pageSize = query.PageSize is < 1 or > 200 ? 20 : query.PageSize;
+
+        var pageItems = materialized.Skip((page - 1) * pageSize).Take(pageSize);
+
+        return new PagedResult<ProductDto>
+        {
+            Items = _mapper.Map<List<ProductDto>>(pageItems),
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = materialized.Count,
+        };
     }
 
     public async Task<ProductDto?> GetByIdAsync(int id)

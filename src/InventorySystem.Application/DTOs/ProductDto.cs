@@ -35,3 +35,16 @@ public class UpdateProductDto
     public int CategoryId { get; set; }
     public bool IsActive { get; set; }
 }
+
+public class ProductQueryDto
+{
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
+
+    // Matches against Sku or Name, case-insensitive.
+    public string? Search { get; set; }
+
+    // One of: name, name_desc, sku, sku_desc, price, price_desc,
+    // reorderlevel, reorderlevel_desc. Defaults to name ascending.
+    public string? SortBy { get; set; }
+}

@@ -1,12 +1,27 @@
 using InventorySystem.Domain.Entities;
+using InventorySystem.Domain.Enums;
+using InventorySystem.Domain.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace InventorySystem.Infrastructure.Persistence;
 
 public static class AppDbContextSeed
 {
-    public static async Task SeedAsync(AppDbContext context)
+    public static async Task SeedAsync(AppDbContext context, IPasswordHasher passwordHasher)
     {
+        // Guarded independently of the catalog seed below: the Users table was
+        // added in a later migration, so a database that already has categories
+        // from an earlier run would otherwise never get users seeded.
+        if (!await context.Users.AnyAsync())
+        {
+            context.Users.AddRange(
+                new User { Username = "admin", PasswordHash = passwordHasher.Hash("Admin123!"), Role = UserRole.Admin },
+                new User { Username = "manager", PasswordHash = passwordHasher.Hash("Manager123!"), Role = UserRole.Manager },
+                new User { Username = "staff", PasswordHash = passwordHasher.Hash("Staff123!"), Role = UserRole.Staff });
+
+            await context.SaveChangesAsync();
+        }
+
         if (await context.Categories.AnyAsync())
             return;
 

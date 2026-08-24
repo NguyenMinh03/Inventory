@@ -1,6 +1,7 @@
 using FluentValidation;
 using InventorySystem.Application.DTOs;
 using InventorySystem.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventorySystem.API.Controllers;
@@ -24,8 +25,8 @@ public class ProductsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<ProductDto>>> GetAll() =>
-        Ok(await _productService.GetAllAsync());
+    public async Task<ActionResult<PagedResult<ProductDto>>> GetAll([FromQuery] ProductQueryDto query) =>
+        Ok(await _productService.GetAllAsync(query));
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<ProductDto>> GetById(int id)
@@ -51,6 +52,7 @@ public class ProductsController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Delete(int id)
     {
         await _productService.DeleteAsync(id);

@@ -13,6 +13,7 @@ public interface IUnitOfWork
     IRepository<PurchaseOrder> PurchaseOrders { get; }
     IRepository<PurchaseOrderItem> PurchaseOrderItems { get; }
     IRepository<ProductSupplier> ProductSuppliers { get; }
+    IUserRepository Users { get; }
 
     Task<int> SaveChangesAsync();
 }

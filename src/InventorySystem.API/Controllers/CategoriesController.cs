@@ -1,6 +1,7 @@
 using FluentValidation;
 using InventorySystem.Application.DTOs;
 using InventorySystem.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace InventorySystem.API.Controllers;
@@ -51,6 +52,7 @@ public class CategoriesController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin,Manager")]
     public async Task<IActionResult> Delete(int id)
     {
         await _categoryService.DeleteAsync(id);

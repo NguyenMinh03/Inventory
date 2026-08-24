@@ -17,6 +17,7 @@ public class UnitOfWork : IUnitOfWork, IDisposable
     private IRepository<PurchaseOrder>? _purchaseOrders;
     private IRepository<PurchaseOrderItem>? _purchaseOrderItems;
     private IRepository<ProductSupplier>? _productSuppliers;
+    private IUserRepository? _users;
 
     public UnitOfWork(AppDbContext context)
     {
@@ -32,6 +33,7 @@ public class UnitOfWork : IUnitOfWork, IDisposable
     public IRepository<PurchaseOrder> PurchaseOrders => _purchaseOrders ??= new Repository<PurchaseOrder>(_context);
     public IRepository<PurchaseOrderItem> PurchaseOrderItems => _purchaseOrderItems ??= new Repository<PurchaseOrderItem>(_context);
     public IRepository<ProductSupplier> ProductSuppliers => _productSuppliers ??= new Repository<ProductSupplier>(_context);
+    public IUserRepository Users => _users ??= new UserRepository(_context);
 
     public Task<int> SaveChangesAsync() => _context.SaveChangesAsync();
 
