@@ -1,6 +1,6 @@
 # Inventory & Warehouse Management System
 
-A backend inventory management API built with ASP.NET Core and SQL Server, using Clean Architecture. It tracks products, stock levels across multiple warehouses, stock movements (in/out/transfer), suppliers, and purchase orders, with JWT authentication and role-based authorization.
+An inventory management system: an ASP.NET Core + SQL Server API built with Clean Architecture, plus a React admin frontend on top of it. It tracks products, stock levels across multiple warehouses, stock movements (in/out/transfer), suppliers, and purchase orders, with JWT authentication and role-based authorization.
 
 Full design rationale, the dependency-flow diagram, the ER diagram, and the request-lifecycle sequence diagram live in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
@@ -12,12 +12,13 @@ cd Inventory
 docker compose up --build
 ```
 
-That's it — no local .NET SDK, no manual `dotnet ef database update`, no manual seeding. On first run the API container waits for SQL Server to become healthy, applies EF Core migrations, and seeds demo data automatically. Give it 30–60 seconds after the containers report healthy for the migration/seed step to finish, then:
+That's it — no local .NET SDK, no Node, no manual `dotnet ef database update`, no manual seeding. Three containers come up: SQL Server, the API, and the frontend (nginx serving the React build, reverse-proxying `/api` to the API container). On first run the API container waits for SQL Server to become healthy, applies EF Core migrations, and seeds demo data automatically. Give it 30–60 seconds after the containers report healthy for the migration/seed step to finish, then:
 
+- **Web app: http://localhost:8081** — the React admin UI
 - Swagger UI: **http://localhost:8080/swagger**
 - API base URL: **http://localhost:8080**
 
-Log in with one of the seeded demo accounts (see [Demo accounts](#demo-accounts) below), click **Authorize** in Swagger, paste the token, and every endpoint is live.
+Log in with one of the seeded demo accounts (see [Demo accounts](#demo-accounts) below) on either the web app's login screen or Swagger's **Authorize** dialog.
 
 To stop everything: `docker compose down` (add `-v` to also drop the database volume).
 
@@ -34,8 +35,9 @@ A ready-to-run request collection is committed at [`requests/InventorySystem.htt
 | Application | FluentValidation, AutoMapper |
 | Data access | Entity Framework Core 10 (SQL Server), plus hand-written parameterized ADO.NET for one report |
 | Database | SQL Server 2022 (LocalDB for local dev, containerized for `docker compose`) |
+| Frontend | React 19 + TypeScript, Vite, React Router — no UI component library, hand-written CSS |
 | Testing | xUnit, Moq (unit), `WebApplicationFactory` against a real database (integration) |
-| Containerization | Docker, multi-stage Dockerfile, docker-compose |
+| Containerization | Docker, multi-stage Dockerfiles (API and frontend), docker-compose (3 services) |
 
 ## Demo accounts
 
@@ -55,10 +57,23 @@ Seeded automatically on first run (see `AppDbContextSeed`):
 - **Reporting** — low-stock, stock valuation (grouped by warehouse or category), and a filtered/paginated movement history. The valuation reports run through EF Core LINQ; movement history is deliberately hand-written parameterized ADO.NET (`SqlCommand`/`SqlDataReader`, dynamic `WHERE`, a three-table `JOIN`, SQL Server `OFFSET`/`FETCH` pagination) to demonstrate direct SQL, not just ORM reliance.
 - **Auth** — JWT bearer tokens, three roles (`Admin`, `Manager`, `Staff`). Every endpoint requires authentication by default; only `Admin`/`Manager` can delete.
 - **Tests** — unit tests mock `IUnitOfWork` with Moq to verify business rules (insufficient-stock rejection, transfer atomicity) without a database; integration tests boot the real API via `WebApplicationFactory<Program>` against a real (LocalDB) database and exercise full HTTP request/response cycles.
+- **Frontend** — a React admin UI covering every resource: full CRUD on Products/Categories/Warehouses/Suppliers (with pagination/search/sort on Products), a Stock page for recording movements and transfers, a Purchase Order list + detail view driving the whole draft→send→receive→cancel lifecycle, all three reports, and a dashboard summarizing key numbers. Delete buttons and other Admin/Manager-only actions are hidden client-side based on the logged-in role — purely a UX nicety, since the API enforces the real check regardless of what the client sends.
 
 ## Screenshots
 
-Swagger UI, taken from a live `docker compose up` run:
+**The dashboard** (React frontend, served by nginx via `docker compose`)
+![Frontend dashboard](docs/screenshots/frontend-dashboard.png)
+
+**Products** — search, sort, and pagination against the real API
+![Frontend products page](docs/screenshots/frontend-products.png)
+
+**Stock** — current levels, record a movement, transfer between warehouses
+![Frontend stock page](docs/screenshots/frontend-stock.png)
+
+**A purchase order after a full create → send → receive cycle**
+![Frontend purchase order detail](docs/screenshots/frontend-purchase-order.png)
+
+Swagger UI, taken from the same live run:
 
 **Endpoint list, grouped by controller**
 ![Swagger UI overview](docs/screenshots/swagger-overview.png)
@@ -171,6 +186,18 @@ dotnet run --project src/InventorySystem.API
 ```
 
 Connection string and JWT settings live in `src/InventorySystem.API/appsettings.Development.json`.
+
+### Frontend dev server
+
+With the API running as above (LocalDB, `https://localhost:5443` by default):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Opens at **http://localhost:5173**. Vite proxies `/api` to `https://localhost:5443` by default (see `vite.config.ts`); if your API is running on a different port, set `VITE_API_PROXY_TARGET` before starting, e.g. `VITE_API_PROXY_TARGET=http://localhost:8080 npm run dev` to point at a `docker compose`-hosted API instead.
 
 ## Running the tests
 

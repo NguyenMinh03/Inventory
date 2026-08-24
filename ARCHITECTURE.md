@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-This document describes the architecture of the Inventory & Warehouse Management System, a backend application built with C#, ASP.NET Core, and SQL Server. The system tracks products, stock levels across multiple warehouses, stock movements, suppliers, and purchase orders.
+This document describes the architecture of the Inventory & Warehouse Management System: a backend built with C#, ASP.NET Core, and SQL Server, plus a React frontend on top of it. The system tracks products, stock levels across multiple warehouses, stock movements, suppliers, and purchase orders.
 
 The architecture follows **Clean Architecture** (also known as Onion Architecture): dependencies always point inward, toward the domain, and outer layers depend on abstractions defined by inner layers rather than the other way around. This keeps business logic independent of frameworks, databases, and UI, and makes the system easier to test and extend.
 
@@ -45,9 +45,18 @@ InventorySystem/
 │       ├── Program.cs
 │       └── appsettings.json
 │
-└── tests/
-    ├── InventorySystem.UnitTests/        (service and business logic tests, Moq)
-    └── InventorySystem.IntegrationTests/ (WebApplicationFactory + a real LocalDB instance)
+├── tests/
+│   ├── InventorySystem.UnitTests/        (service and business logic tests, Moq)
+│   └── InventorySystem.IntegrationTests/ (WebApplicationFactory + a real LocalDB instance)
+│
+└── frontend/                     (React 19 + TypeScript + Vite)
+    └── src/
+        ├── api/                   (types.ts mirrors the DTOs; client.ts is the auth-aware
+        │                           fetch wrapper; endpoints.ts groups calls by resource)
+        ├── auth/                  (AuthContext, RequireAuth route guard)
+        ├── components/            (Layout, Modal, DataTable-ish table markup, StatusBadge)
+        ├── hooks/useAsync.ts       (shared load/error/reload state for every page)
+        └── pages/                 (one per resource, plus Dashboard/Login/PO detail)
 ```
 
 ## 3. Layer Responsibilities
@@ -216,6 +225,10 @@ erDiagram
 
 RESTful conventions over resources: `/api/products`, `/api/categories`, `/api/warehouses`, `/api/suppliers`, `/api/purchaseorders`, `/api/stock/movements`, `/api/stock/transfers`, `/api/reports/*`, `/api/auth/login`. Swagger/OpenAPI (via Swashbuckle) is generated for documentation and manual testing, with a Bearer-token security scheme wired in so a token from `/api/auth/login` can be used directly from the Swagger UI. Pagination, search, and sorting are supported on the product list endpoint (`?page=&pageSize=&search=&sortBy=`) to demonstrate filtered/paged querying rather than loading the entire table for every request.
 
+Enums serialize as their string name (`"type": "In"`, not `0`) via a global `JsonStringEnumConverter` - added once the frontend became a real consumer of this API and "what does `type: 1` mean" stopped being a rhetorical question. `HasConversion<string>()` on the EF Core side (§7) is a separate, unrelated decision about the database column, not the wire format; nothing keeps the two in sync automatically, they just happen to agree.
+
+A named CORS policy exists for local frontend development that bypasses its proxy (`npm run dev` pointed straight at the API's own origin), but it's a fallback: both the Vite dev server and the frontend's nginx container proxy `/api/*` to the API, so the browser sees everything as same-origin in the normal case and CORS is never actually exercised.
+
 ## 10. Testing Strategy
 
 Unit tests target the Application layer's services using a mocked `IUnitOfWork` (Moq), so business rules like "cannot transfer more stock than is on hand" and "a rejected movement writes nothing" are verified without touching a real database — including entity-level assertions (the in-memory `StockLevel.QuantityOnHand` is provably unchanged after a rejected transfer, not just "SaveChangesAsync was never called").
@@ -228,7 +241,7 @@ The critical flow — create product → record stock in → verify the level vi
 
 ## 11. Deployment
 
-The API and database are containerized with Docker; `docker-compose.yml` at the repo root runs the API alongside a SQL Server 2022 container, so the whole system starts with a single `docker compose up --build`. The API applies pending EF Core migrations and seeds demo data automatically on startup (with a short retry loop, since the SQL Server container's healthcheck passing doesn't guarantee it's instantly ready for connections) — no `dotnet ef database update` or manual seeding step required.
+The API, database, and frontend are all containerized with Docker; `docker-compose.yml` at the repo root runs three services - SQL Server 2022, the API, and the frontend (a multi-stage build: `npm run build` in a Node stage, then the static output served by nginx, which also reverse-proxies `/api/*` to the API container) - so the whole system starts with a single `docker compose up --build`. The API applies pending EF Core migrations and seeds demo data automatically on startup (with a short retry loop, since the SQL Server container's healthcheck passing doesn't guarantee it's instantly ready for connections) — no `dotnet ef database update` or manual seeding step required.
 
 ## 12. Key Architectural Decisions
 

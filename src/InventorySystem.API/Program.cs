@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using InventorySystem.API.Middleware;
 using InventorySystem.Application;
 using InventorySystem.Domain.Interfaces;
@@ -14,7 +15,10 @@ using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    // Enums serialize as their string name ("In", not 0) - readable in Swagger
+    // and in the frontend without hardcoding ordinal values on either side.
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -31,6 +35,20 @@ builder.Services.AddSwaggerGen(options =>
     {
         var schemeRef = new OpenApiSecuritySchemeReference("Bearer", document);
         return new OpenApiSecurityRequirement { [schemeRef] = [] };
+    });
+});
+
+// The frontend proxies /api through Vite (dev) or nginx (docker compose), so
+// requests normally arrive same-origin - this is a defensive fallback for
+// anyone running `npm run dev` and pointing straight at the API's own origin.
+const string FrontendCorsPolicy = "Frontend";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(FrontendCorsPolicy, policy =>
+    {
+        policy.WithOrigins("http://localhost:5173", "http://localhost:8081")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
     });
 });
 
@@ -117,6 +135,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors(FrontendCorsPolicy);
 
 app.UseAuthentication();
 app.UseAuthorization();

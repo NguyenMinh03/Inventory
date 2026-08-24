@@ -55,7 +55,7 @@ Content-Type: application/json
 {
   "productId": {{createProduct.response.body.id}},
   "warehouseId": 1,
-  "type": 0,
+  "type": "In",
   "quantity": 50,
   "reference": "DEMO-RECEIPT-1"
 }
@@ -74,7 +74,7 @@ Content-Type: application/json
 {
   "productId": {{createProduct.response.body.id}},
   "warehouseId": 1,
-  "type": 1,
+  "type": "Out",
   "quantity": 9999
 }
 

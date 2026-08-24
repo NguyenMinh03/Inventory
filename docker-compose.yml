@@ -35,5 +35,14 @@ services:
       Jwt__Audience: "InventorySystem"
       Jwt__ExpiryMinutes: "60"
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - api
+    ports:
+      - "8081:80"
+
 volumes:
   mssql_data:
