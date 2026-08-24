@@ -1,0 +1,43 @@
+using InventorySystem.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+
+namespace InventorySystem.Infrastructure.Persistence;
+
+public static class AppDbContextSeed
+{
+    public static async Task SeedAsync(AppDbContext context)
+    {
+        if (await context.Categories.AnyAsync())
+            return;
+
+        var electronics = new Category { Name = "Electronics", Description = "Electronic components and devices" };
+        var officeSupplies = new Category { Name = "Office Supplies", Description = "General office consumables" };
+        context.Categories.AddRange(electronics, officeSupplies);
+
+        var mainWarehouse = new Warehouse { Name = "Main Warehouse", Address = "100 Logistics Way, Springfield" };
+        var overflowWarehouse = new Warehouse { Name = "Overflow Warehouse", Address = "22 Industrial Park Rd, Springfield" };
+        context.Warehouses.AddRange(mainWarehouse, overflowWarehouse);
+
+        await context.SaveChangesAsync();
+
+        var products = new List<Product>
+        {
+            new("SKU-1001", "USB-C Cable 1m", "each", 4.99m, 50, electronics.Id),
+            new("SKU-1002", "Wireless Mouse", "each", 14.99m, 30, electronics.Id),
+            new("SKU-1003", "27-inch Monitor", "each", 189.00m, 10, electronics.Id),
+            new("SKU-2001", "A4 Paper Ream", "ream", 3.49m, 100, officeSupplies.Id),
+            new("SKU-2002", "Ballpoint Pen (Box of 12)", "box", 5.25m, 40, officeSupplies.Id),
+        };
+        context.Products.AddRange(products);
+
+        await context.SaveChangesAsync();
+
+        foreach (var product in products)
+        {
+            context.StockLevels.Add(new StockLevel { ProductId = product.Id, WarehouseId = mainWarehouse.Id, QuantityOnHand = 75 });
+            context.StockLevels.Add(new StockLevel { ProductId = product.Id, WarehouseId = overflowWarehouse.Id, QuantityOnHand = 20 });
+        }
+
+        await context.SaveChangesAsync();
+    }
+}

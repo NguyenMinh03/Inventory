@@ -8,7 +8,7 @@ public interface IUnitOfWork
     IRepository<Category> Categories { get; }
     IRepository<Warehouse> Warehouses { get; }
     IRepository<Supplier> Suppliers { get; }
-    IRepository<StockLevel> StockLevels { get; }
+    IStockLevelRepository StockLevels { get; }
     IRepository<StockMovement> StockMovements { get; }
     IRepository<PurchaseOrder> PurchaseOrders { get; }
     IRepository<PurchaseOrderItem> PurchaseOrderItems { get; }

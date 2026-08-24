@@ -1,9 +1,8 @@
 namespace InventorySystem.Domain.Entities;
 
+// Composite key (ProductId, WarehouseId): one stock-level row per product/warehouse pair.
 public class StockLevel
 {
-    public int Id { get; set; }
-
     public int ProductId { get; set; }
     public Product? Product { get; set; }
 
