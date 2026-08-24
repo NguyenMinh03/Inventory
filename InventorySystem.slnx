@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/InventorySystem.API/InventorySystem.API.csproj" />
+    <Project Path="src/InventorySystem.Application/InventorySystem.Application.csproj" />
+    <Project Path="src/InventorySystem.Domain/InventorySystem.Domain.csproj" />
+    <Project Path="src/InventorySystem.Infrastructure/InventorySystem.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/InventorySystem.IntegrationTests/InventorySystem.IntegrationTests.csproj" />
+    <Project Path="tests/InventorySystem.UnitTests/InventorySystem.UnitTests.csproj" />
+  </Folder>
+</Solution>
