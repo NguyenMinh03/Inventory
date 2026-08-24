@@ -33,6 +33,9 @@ public static class AppDbContextSeed
         var overflowWarehouse = new Warehouse { Name = "Overflow Warehouse", Address = "22 Industrial Park Rd, Springfield" };
         context.Warehouses.AddRange(mainWarehouse, overflowWarehouse);
 
+        var supplier = new Supplier { Name = "Acme Distribution Co.", ContactName = "Jordan Lee", Email = "orders@acmedist.example" };
+        context.Suppliers.Add(supplier);
+
         await context.SaveChangesAsync();
 
         var products = new List<Product>

@@ -1,0 +1,159 @@
+### InventorySystem API - example requests
+### Works with the VS Code "REST Client" extension, JetBrains Rider/IntelliJ's
+### built-in HTTP client, or Visual Studio 2022's built-in .http support.
+### Run requests top to bottom - later ones reuse variables captured from
+### earlier responses (e.g. {{login.response.body.token}}).
+###
+### Point @host at whichever way you're running the API:
+###   docker compose up          -> http://localhost:8080
+###   dotnet run (LocalDB, dev)  -> https://localhost:5443 (or your launchSettings port)
+
+@host = http://localhost:8080
+
+### 1. Log in as the seeded admin user (see AppDbContextSeed for all three demo accounts)
+# @name login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "Admin123!"
+}
+
+### 2. List categories (any authenticated role can read)
+GET {{host}}/api/Categories
+Authorization: Bearer {{login.response.body.token}}
+
+### 3. List products - paginated, searchable, sortable
+GET {{host}}/api/Products?page=1&pageSize=10&sortBy=price_desc
+Authorization: Bearer {{login.response.body.token}}
+
+### 4. Create a product
+# @name createProduct
+POST {{host}}/api/Products
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{
+  "sku": "DEMO-0001",
+  "name": "Demo Widget",
+  "unitOfMeasure": "each",
+  "unitPrice": 12.50,
+  "reorderLevel": 5,
+  "categoryId": 1
+}
+
+### 5. List warehouses (to find a warehouseId for the next step)
+GET {{host}}/api/Warehouses
+Authorization: Bearer {{login.response.body.token}}
+
+### 6. Record stock coming IN for the new product
+POST {{host}}/api/stock/movements
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{
+  "productId": {{createProduct.response.body.id}},
+  "warehouseId": 1,
+  "type": 0,
+  "quantity": 50,
+  "reference": "DEMO-RECEIPT-1"
+}
+
+### 7. Check the stock level - should show the 50 units just recorded
+GET {{host}}/api/stock/levels/product/{{createProduct.response.body.id}}
+Authorization: Bearer {{login.response.body.token}}
+
+### 8. Try to take out more than is on hand - demonstrates the atomic
+### "can't go negative" guarantee: this returns 409 Conflict and step 9
+### below will show the level is completely unchanged.
+POST {{host}}/api/stock/movements
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{
+  "productId": {{createProduct.response.body.id}},
+  "warehouseId": 1,
+  "type": 1,
+  "quantity": 9999
+}
+
+### 9. Confirm nothing was written by the rejected request above
+GET {{host}}/api/stock/levels/product/{{createProduct.response.body.id}}
+Authorization: Bearer {{login.response.body.token}}
+
+### 10. Transfer stock between warehouses (atomic: one Out leg + one In leg)
+POST {{host}}/api/stock/transfers
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{
+  "productId": {{createProduct.response.body.id}},
+  "sourceWarehouseId": 1,
+  "destinationWarehouseId": 2,
+  "quantity": 10
+}
+
+### 11. Low-stock report
+GET {{host}}/api/reports/low-stock
+Authorization: Bearer {{login.response.body.token}}
+
+### 12. Stock valuation, grouped by warehouse
+GET {{host}}/api/reports/stock-valuation?by=warehouse
+Authorization: Bearer {{login.response.body.token}}
+
+### 13. Stock valuation, grouped by category
+GET {{host}}/api/reports/stock-valuation?by=category
+Authorization: Bearer {{login.response.body.token}}
+
+### 14. Movement history for the demo product, paginated
+GET {{host}}/api/reports/movement-history?productId={{createProduct.response.body.id}}&page=1&pageSize=10
+Authorization: Bearer {{login.response.body.token}}
+
+### 15. Create a purchase order
+# @name createPO
+POST {{host}}/api/PurchaseOrders
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{
+  "supplierId": 1,
+  "items": [
+    { "productId": {{createProduct.response.body.id}}, "quantityOrdered": 20, "unitCost": 8.00 }
+  ]
+}
+
+### 16. Send the purchase order (Draft -> Sent)
+POST {{host}}/api/PurchaseOrders/{{createPO.response.body.id}}/send
+Authorization: Bearer {{login.response.body.token}}
+
+### 17. Receive it - this triggers an In stock movement per line item
+POST {{host}}/api/PurchaseOrders/{{createPO.response.body.id}}/receive
+Authorization: Bearer {{login.response.body.token}}
+Content-Type: application/json
+
+{
+  "warehouseId": 1,
+  "items": [
+    { "purchaseOrderItemId": {{createPO.response.body.items[0].id}}, "quantityReceived": 20 }
+  ]
+}
+
+### 18. Log in as staff (a lower-privileged role) to demonstrate 403 on delete
+# @name loginStaff
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "staff",
+  "password": "Staff123!"
+}
+
+### 19. Staff attempting to delete a product - expect 403 Forbidden
+### (Admin or Manager tokens succeed with 204 instead - see role policy in
+### ProductsController.)
+DELETE {{host}}/api/Products/{{createProduct.response.body.id}}
+Authorization: Bearer {{loginStaff.response.body.token}}
+
+### 20. No token at all - expect 401 Unauthorized
+GET {{host}}/api/Products

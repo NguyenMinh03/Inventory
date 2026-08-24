@@ -92,6 +92,27 @@ if (app.Environment.IsDevelopment())
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+
+    // Applies pending migrations automatically instead of requiring `dotnet ef
+    // database update` to be run by hand - the docker-compose SQL Server
+    // container starts empty, so this is what actually creates the schema
+    // there. A few retries because compose's healthcheck gets SQL Server
+    // accepting TCP connections before it's necessarily done initializing.
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    for (var attempt = 1; ; attempt++)
+    {
+        try
+        {
+            await db.Database.MigrateAsync();
+            break;
+        }
+        catch (Exception ex) when (attempt < 5)
+        {
+            logger.LogWarning(ex, "Database not ready yet (attempt {Attempt}/5), retrying in 5s...", attempt);
+            await Task.Delay(TimeSpan.FromSeconds(5));
+        }
+    }
+
     await AppDbContextSeed.SeedAsync(db, passwordHasher);
 }
 
