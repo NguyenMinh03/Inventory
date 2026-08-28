@@ -8,19 +8,18 @@ using Moq;
 
 namespace InventorySystem.UnitTests.Services;
 
-public class AuthServiceTests
+public class AuthServiceTests : UnitOfWorkTestBase
 {
-    private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IUserRepository> _users = new();
     private readonly Mock<IPasswordHasher> _passwordHasher = new();
     private readonly Mock<IJwtTokenGenerator> _tokenGenerator = new();
 
     public AuthServiceTests()
     {
-        _unitOfWork.SetupGet(u => u.Users).Returns(_users.Object);
+        UnitOfWork.SetupGet(u => u.Users).Returns(_users.Object);
     }
 
-    private AuthService CreateService() => new(_unitOfWork.Object, _passwordHasher.Object, _tokenGenerator.Object);
+    private AuthService CreateService() => new(UnitOfWork.Object, _passwordHasher.Object, _tokenGenerator.Object);
 
     [Fact]
     public async Task LoginAsync_ValidCredentials_ReturnsTokenFromGenerator()

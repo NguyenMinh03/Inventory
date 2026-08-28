@@ -1,36 +1,29 @@
-using AutoMapper;
 using InventorySystem.Application.DTOs;
 using InventorySystem.Application.Interfaces;
-using InventorySystem.Application.Mappings;
 using InventorySystem.Application.Services;
 using InventorySystem.Domain.Entities;
 using InventorySystem.Domain.Enums;
 using InventorySystem.Domain.Exceptions;
 using InventorySystem.Domain.Interfaces;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace InventorySystem.UnitTests.Services;
 
-public class PurchaseOrderServiceTests
+[Collection(MapperCollection.Name)]
+public class PurchaseOrderServiceTests : ServiceTestBase
 {
-    private readonly Mock<IUnitOfWork> _unitOfWork = new();
     private readonly Mock<IRepository<Supplier>> _suppliers = new();
     private readonly Mock<IRepository<Product>> _products = new();
     private readonly Mock<IRepository<Warehouse>> _warehouses = new();
     private readonly Mock<IRepository<PurchaseOrder>> _purchaseOrders = new();
     private readonly Mock<IStockService> _stockService = new();
-    private readonly IMapper _mapper;
 
-    public PurchaseOrderServiceTests()
+    public PurchaseOrderServiceTests(MapperFixture mapperFixture) : base(mapperFixture)
     {
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<MappingProfile>(), NullLoggerFactory.Instance);
-        _mapper = config.CreateMapper();
-
-        _unitOfWork.SetupGet(u => u.Suppliers).Returns(_suppliers.Object);
-        _unitOfWork.SetupGet(u => u.Products).Returns(_products.Object);
-        _unitOfWork.SetupGet(u => u.Warehouses).Returns(_warehouses.Object);
-        _unitOfWork.SetupGet(u => u.PurchaseOrders).Returns(_purchaseOrders.Object);
+        UnitOfWork.SetupGet(u => u.Suppliers).Returns(_suppliers.Object);
+        UnitOfWork.SetupGet(u => u.Products).Returns(_products.Object);
+        UnitOfWork.SetupGet(u => u.Warehouses).Returns(_warehouses.Object);
+        UnitOfWork.SetupGet(u => u.PurchaseOrders).Returns(_purchaseOrders.Object);
 
         _warehouses.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(new Warehouse { Id = 1, Name = "Main" });
     }
@@ -60,7 +53,7 @@ public class PurchaseOrderServiceTests
             .Callback<CreateStockMovementDto>(dto => staged = dto)
             .ReturnsAsync(new StockMovementDto());
 
-        var service = new PurchaseOrderService(_unitOfWork.Object, _stockService.Object, _mapper);
+        var service = new PurchaseOrderService(UnitOfWork.Object, _stockService.Object, Mapper);
         var dto = new ReceivePurchaseOrderDto
         {
             WarehouseId = 1,
@@ -82,7 +75,7 @@ public class PurchaseOrderServiceTests
         // The stock movement is only staged here - PurchaseOrderService owns the
         // single SaveChangesAsync that commits it together with the PO update.
         _stockService.Verify(s => s.RecordMovementAsync(It.IsAny<CreateStockMovementDto>()), Times.Never);
-        _unitOfWork.Verify(u => u.SaveChangesAsync(), Times.Once);
+        UnitOfWork.Verify(u => u.SaveChangesAsync(), Times.Once);
     }
 
     [Fact]
@@ -93,7 +86,7 @@ public class PurchaseOrderServiceTests
         _stockService.Setup(s => s.StageMovementAsync(It.IsAny<CreateStockMovementDto>()))
             .ReturnsAsync(new StockMovementDto());
 
-        var service = new PurchaseOrderService(_unitOfWork.Object, _stockService.Object, _mapper);
+        var service = new PurchaseOrderService(UnitOfWork.Object, _stockService.Object, Mapper);
         var dto = new ReceivePurchaseOrderDto
         {
             WarehouseId = 1,
@@ -112,7 +105,7 @@ public class PurchaseOrderServiceTests
         var order = MakeSentOrder(orderId: 3, itemId: 12, productId: 5, quantityOrdered: 10);
         _purchaseOrders.Setup(r => r.GetByIdAsync(3, "Supplier", "Items.Product")).ReturnsAsync(order);
 
-        var service = new PurchaseOrderService(_unitOfWork.Object, _stockService.Object, _mapper);
+        var service = new PurchaseOrderService(UnitOfWork.Object, _stockService.Object, Mapper);
         var dto = new ReceivePurchaseOrderDto
         {
             WarehouseId = 1,
@@ -122,7 +115,7 @@ public class PurchaseOrderServiceTests
         await Assert.ThrowsAsync<DomainException>(() => service.ReceiveAsync(3, dto));
 
         _stockService.Verify(s => s.StageMovementAsync(It.IsAny<CreateStockMovementDto>()), Times.Never);
-        _unitOfWork.Verify(u => u.SaveChangesAsync(), Times.Never);
+        UnitOfWork.Verify(u => u.SaveChangesAsync(), Times.Never);
     }
 
     [Fact]
@@ -132,7 +125,7 @@ public class PurchaseOrderServiceTests
         order.Status = PurchaseOrderStatus.Draft;
         _purchaseOrders.Setup(r => r.GetByIdAsync(4, "Supplier", "Items.Product")).ReturnsAsync(order);
 
-        var service = new PurchaseOrderService(_unitOfWork.Object, _stockService.Object, _mapper);
+        var service = new PurchaseOrderService(UnitOfWork.Object, _stockService.Object, Mapper);
         var dto = new ReceivePurchaseOrderDto
         {
             WarehouseId = 1,

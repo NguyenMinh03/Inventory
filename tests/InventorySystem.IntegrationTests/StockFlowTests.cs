@@ -27,22 +27,25 @@ public class StockFlowTests : IClassFixture<InventoryApiFactory>
         return client;
     }
 
-    [Fact]
-    public async Task CreateProduct_RecordStockIn_ThenGetStockLevel_ReflectsRecordedQuantity()
+    // The seed guarantees at least one category and one warehouse exist.
+    private static async Task<int> GetFirstCategoryIdAsync(HttpClient client)
     {
-        var client = await CreateAuthenticatedClientAsync();
-
-        // Arrange: the seed guarantees at least one category and one warehouse exist.
         var categories = await (await client.GetAsync("/api/Categories")).Content.ReadFromJsonAsync<List<CategoryDto>>();
-        var warehouses = await (await client.GetAsync("/api/Warehouses")).Content.ReadFromJsonAsync<List<WarehouseDto>>();
-        var categoryId = categories!.First().Id;
-        var warehouseId = warehouses!.First().Id;
+        return categories!.First().Id;
+    }
 
-        // Act 1: create product.
+    private static async Task<int> GetFirstWarehouseIdAsync(HttpClient client)
+    {
+        var warehouses = await (await client.GetAsync("/api/Warehouses")).Content.ReadFromJsonAsync<List<WarehouseDto>>();
+        return warehouses!.First().Id;
+    }
+
+    private static async Task<ProductDto> CreateProductAsync(HttpClient client, string sku, int categoryId, string name = "Integration Test Product")
+    {
         var createResponse = await client.PostAsJsonAsync("/api/Products", new CreateProductDto
         {
-            Sku = "IT-SKU-0001",
-            Name = "Integration Test Widget",
+            Sku = sku,
+            Name = name,
             UnitOfMeasure = "each",
             UnitPrice = 9.99m,
             ReorderLevel = 5,
@@ -51,6 +54,18 @@ public class StockFlowTests : IClassFixture<InventoryApiFactory>
         Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
         var product = await createResponse.Content.ReadFromJsonAsync<ProductDto>();
         Assert.NotNull(product);
+        return product!;
+    }
+
+    [Fact]
+    public async Task CreateProduct_RecordStockIn_ThenGetStockLevel_ReflectsRecordedQuantity()
+    {
+        var client = await CreateAuthenticatedClientAsync();
+        var categoryId = await GetFirstCategoryIdAsync(client);
+        var warehouseId = await GetFirstWarehouseIdAsync(client);
+
+        // Act 1: create product.
+        var product = await CreateProductAsync(client, "IT-SKU-0001", categoryId, "Integration Test Widget");
 
         // Act 2: record 40 units in.
         var movementResponse = await client.PostAsJsonAsync("/api/stock/movements", new CreateStockMovementDto
@@ -76,25 +91,14 @@ public class StockFlowTests : IClassFixture<InventoryApiFactory>
     public async Task RecordStockOut_ExceedingOnHand_Returns409AndLeavesLevelUnchanged()
     {
         var client = await CreateAuthenticatedClientAsync();
+        var categoryId = await GetFirstCategoryIdAsync(client);
+        var warehouseId = await GetFirstWarehouseIdAsync(client);
 
-        var categories = await (await client.GetAsync("/api/Categories")).Content.ReadFromJsonAsync<List<CategoryDto>>();
-        var warehouses = await (await client.GetAsync("/api/Warehouses")).Content.ReadFromJsonAsync<List<WarehouseDto>>();
-
-        var createResponse = await client.PostAsJsonAsync("/api/Products", new CreateProductDto
-        {
-            Sku = "IT-SKU-0002",
-            Name = "Integration Test Gadget",
-            UnitOfMeasure = "each",
-            UnitPrice = 5.00m,
-            ReorderLevel = 1,
-            CategoryId = categories!.First().Id,
-        });
-        var product = await createResponse.Content.ReadFromJsonAsync<ProductDto>();
-        var warehouseId = warehouses!.First().Id;
+        var product = await CreateProductAsync(client, "IT-SKU-0002", categoryId, "Integration Test Gadget");
 
         await client.PostAsJsonAsync("/api/stock/movements", new CreateStockMovementDto
         {
-            ProductId = product!.Id,
+            ProductId = product.Id,
             WarehouseId = warehouseId,
             Type = MovementType.In,
             Quantity = 10,
@@ -130,22 +134,12 @@ public class StockFlowTests : IClassFixture<InventoryApiFactory>
     public async Task DeleteProduct_AsStaff_Returns403()
     {
         var adminClient = await CreateAuthenticatedClientAsync();
-        var categories = await (await adminClient.GetAsync("/api/Categories")).Content.ReadFromJsonAsync<List<CategoryDto>>();
-
-        var createResponse = await adminClient.PostAsJsonAsync("/api/Products", new CreateProductDto
-        {
-            Sku = "IT-SKU-0003",
-            Name = "Integration Test Delete Target",
-            UnitOfMeasure = "each",
-            UnitPrice = 1.00m,
-            ReorderLevel = 1,
-            CategoryId = categories!.First().Id,
-        });
-        var product = await createResponse.Content.ReadFromJsonAsync<ProductDto>();
+        var categoryId = await GetFirstCategoryIdAsync(adminClient);
+        var product = await CreateProductAsync(adminClient, "IT-SKU-0003", categoryId, "Integration Test Delete Target");
 
         var staffClient = await CreateAuthenticatedClientAsync("staff", "Staff123!");
 
-        var deleteResponse = await staffClient.DeleteAsync($"/api/Products/{product!.Id}");
+        var deleteResponse = await staffClient.DeleteAsync($"/api/Products/{product.Id}");
 
         Assert.Equal(HttpStatusCode.Forbidden, deleteResponse.StatusCode);
     }
